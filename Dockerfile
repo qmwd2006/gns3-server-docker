@@ -5,6 +5,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/re
 
 RUN apk add git gcc make cmake musl-dev linux-headers
 
+
 FROM builder as vpcs
 
 RUN git clone --depth 1 https://github.com/gns3/vpcs
@@ -15,6 +16,7 @@ RUN sed -i "/#include <sys\/ioctl\.h>/i#include <sys/types.h>" remote.c
 
 RUN ./mk.sh && install vpcs /usr/local/bin/
 
+
 FROM builder as ubridge
 
 RUN git clone --depth 1 https://github.com/gns3/ubridge
@@ -24,6 +26,7 @@ WORKDIR /ubridge
 RUN apk add libpcap-dev libcap-setcap
 
 RUN make && make install
+
 
 FROM builder as dynamips
 
