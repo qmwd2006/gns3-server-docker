@@ -1,0 +1,51 @@
+#!/sbin/openrc-run
+
+extra_started_commands="reload"
+
+: ${DIND_SERVER_BINARY:=${RC_PREFIX%/}/usr/local/bin/dockerd-entrypoint.sh}
+: ${DIND_SERVER_PIDFILE:=${RC_PREFIX%/}/run/${SVCNAME}.pid}
+: ${DIND_SERVER_COMMAND_USER:=root:root}
+: ${DIND_SERVER_LOG_ENABLED:=yes}
+: ${DIND_SERVER_LOG_PATH:=${RC_PREFIX%/}/var/log/DIND}
+: ${DIND_SERVER_LOG:=${DIND_SERVER_LOG_PATH}/${RC_SVCNAME}.log}
+
+command="${DIND_SERVER_BINARY}"
+pidfile="${DIND_SERVER_PIDFILE}"
+command_user="${DIND_SERVER_COMMAND_USER}"
+command_background="yes"
+command_args="${DIND_SERVER_OPTS}"
+
+depend() {
+  need net
+}
+
+checkconfig() {
+  if yesno "${DIND_SERVER_LOG_ENABLED}" ; then
+    output_log=${DIND_SERVER_LOG};
+    error_log=${DIND_SERVER_LOG};
+    if [ "${command_user}" ] ; then
+      checkpath --directory --mode 0700 --owner "${command_user}" "${DIND_SERVER_LOG_PATH}";
+    else
+      unset command_user
+    fi
+  fi
+}
+
+start_pre() {
+  if [ "${RC_CMD}" != "restart" ] ; then
+    checkconfig || return $?
+  fi
+}
+
+stop_pre() {
+  if [ "${RC_CMD}" = "restart" ] ; then
+    checkconfig || return $?
+  fi
+}
+
+reload() {
+  checkconfig || return $?
+  ebegin "Reloading ${RC_SVCNAME}"
+  start-stop-daemon --signal HUP --pidfile "${pidfile}"
+  eend $?
+}

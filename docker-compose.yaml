@@ -1,0 +1,11 @@
+version: "3"
+services:
+  srv:
+    image: qmwd2006/gns3-server
+    privileged: true
+    tty: true
+    stdin_open: true
+    volumes:
+      - ./ws:/ws
+    ports:
+      - "4080:3080"

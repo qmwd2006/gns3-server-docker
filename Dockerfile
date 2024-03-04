@@ -39,14 +39,32 @@ RUN apk add elfutils-dev
 RUN mkdir build && cd build && cmake .. && make && make install
 
 
-FROM alpine
+FROM alpine as base
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories \
 	&& apk update
 
-RUN apk add libpcap libelf
+
+FROM base as server
+
+RUN apk add python3 busybox-static gcc python3-dev musl-dev linux-headers
+
+RUN python -m venv /opt/gns3-venv && /opt/gns3-venv/bin/pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple --no-cache-dir gns3-server
+
+
+FROM docker:dind
+
+ENTRYPOINT ["/sbin/init"]
 
 COPY --from=vpcs /usr/local/bin/vpcs /usr/local/bin/
 COPY --from=ubridge /usr/local/bin/ubridge /usr/local/bin/
 COPY --from=dynamips /usr/local/bin/dynamips /usr/local/bin/
+COPY --from=server /opt/gns3-venv/ /opt/gns3-venv/
+
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories \
+	&& apk update \
+	&& apk add --no-cache openrc python3 mtools qemu-img qemu-system-x86_64 iproute2 libpcap libelf \
+	&& sed -i '/^tty/s/.*/#\0/' /etc/inittab
+
+ADD ./patch/ /
 

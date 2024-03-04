@@ -1,0 +1,23 @@
+FROM docker:dind
+
+ENTRYPOINT ["/sbin/init"]
+
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories \
+	&& apk update \
+	&& apk add openrc && sed -i '/^tty/s/.*/#\0/' /etc/inittab && rc-update add local \
+	&& apk add python3 busybox-extras busybox-static mtools qemu-img qemu-system-x86_64 util-linux iproute2 elfutils
+
+RUN apk add gcc python3-dev musl-dev linux-headers
+
+#RUN addgroup gns3 && adduser -D -s /sbin/nologin -G gns3 gns3
+
+#RUN su -s /bin/sh - gns3 -c "python -m venv gns3-venv && gns3-venv/bin/pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple --no-cache-dir gns3-server"
+
+RUN python -m venv /opt/gns3-venv && /opt/gns3-venv/bin/pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple --no-cache-dir gns3-server
+
+RUN apk add libpcap
+
+ADD ./patch/ /
+
+RUN rc-update add gns3 default && rc-update add dind boot && rc-update add br-lan sysinit
+

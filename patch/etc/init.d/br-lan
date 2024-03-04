@@ -1,0 +1,82 @@
+#!/sbin/openrc-run
+
+: ${BR_LAN_IPADDR:=198.168.8.1}
+: ${BR_LAN_PREFIX:=24}
+
+set_iptables_docker_used() {
+	iptablesLegacy=
+	if (
+		# https://git.netfilter.org/iptables/tree/iptables/nft-shared.c?id=f5cf76626d95d2c491a80288bccc160c53b44e88#n420
+		# https://github.com/docker-library/docker/pull/468#discussion_r1442131459
+		for f in /proc/net/ip_tables_names /proc/net/ip6_tables_names /proc/net/arp_tables_names; do
+			if b="$(cat "$f")" && [ -n "$b" ]; then
+				exit 0
+			fi
+		done
+		exit 1
+	); then
+		# if we already have any "legacy" iptables rules, we should always use legacy
+		iptablesLegacy=1
+	fi
+
+	if [ -n "$iptablesLegacy" ]; then
+		# see https://github.com/docker-library/docker/issues/463 (and the dind Dockerfile where this directory is set up)
+		export PATH="/usr/local/sbin/.iptables-legacy:$PATH"
+	fi
+
+	#iptables --version # so users can see whether it's legacy or not
+}
+
+
+build_iptables_cmd() {
+	br_lan_ipaddr=${BR_LAN_IPADDR}
+	br_lan_prefix=${BR_LAN_PREFIX}
+
+	br_out_cmd="POSTROUTING -s ${br_lan_ipaddr}/${br_lan_prefix} -j MASQUERADE" 
+
+	dns_udp_dst=$(iptables-save 2>/dev/null | grep -e "-d 127.0.0.11/32 -p udp -m udp --dport 53 -j DNAT --to-destination 127.0.0.11:" | cut -d " " -f 14)
+	dns_tcp_dst=$(iptables-save 2>/dev/null | grep -e "-d 127.0.0.11/32 -p tcp -m tcp --dport 53 -j DNAT --to-destination 127.0.0.11:" | cut -d " " -f 14)
+
+	dns_udp_cmd="PREROUTING -d ${br_lan_ipaddr}/32 -p udp -m udp --dport 53 -j DNAT --to-destination ${dns_udp_dst}"
+	dns_tcp_cmd="PREROUTING -d ${br_lan_ipaddr}/32 -p tcp -m tcp --dport 53 -j DNAT --to-destination ${dns_tcp_dst}"
+}
+
+add_iptables_rule() {
+	iptables -t nat -C $@ >/dev/null 2>&1 || iptables -t nat -I $@
+}
+
+del_iptables_rule() {
+	iptables -t nat -C $@ >/dev/null 2>&1 && iptables -t nat -D $@
+}
+
+
+
+start() {
+	set_iptables_docker_used
+
+	build_iptables_cmd
+
+	ip link add br-lan type bridge
+	ip link set br-lan up
+	ip addr add ${br_lan_ipaddr}/${br_lan_prefix} brd + dev br-lan
+
+	add_iptables_rule ${br_out_cmd}
+	add_iptables_rule ${dns_udp_cmd}
+	add_iptables_rule ${dns_tcp_cmd}
+	add_iptables_rule $(echo ${dns_udp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
+        add_iptables_rule $(echo ${dns_tcp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
+}
+
+stop() {
+	set_iptables_docker_used
+
+	build_iptables_cmd
+
+	del_iptables_rule ${br_out_cmd}
+	del_iptables_rule ${dns_udp_cmd}
+	del_iptables_rule ${dns_tcp_cmd}
+	del_iptables_rule $(echo ${dns_udp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
+        del_iptables_rule $(echo ${dns_tcp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
+
+	ip link del br-lan
+}

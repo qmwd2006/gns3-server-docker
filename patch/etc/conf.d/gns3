@@ -1,0 +1,3 @@
+GNS3_SERVER_BINARY=/opt/gns3-venv/bin/gns3server
+GNS3_SERVER_COMMAND_USER=root:root
+GNS3_SERVER_LOG_ENABLED=yes
