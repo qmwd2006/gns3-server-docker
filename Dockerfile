@@ -62,8 +62,10 @@ COPY --from=dynamips /usr/local/bin/dynamips /usr/local/bin/
 COPY --from=server /opt/gns3-venv/ /opt/gns3-venv/
 
 RUN apk add --no-cache openrc python3 mtools qemu-img qemu-system-x86_64 iproute2 libpcap libelf busybox-static util-linux-misc \
+	busybox-openrc dhcp \
 	&& rm -f /var/cache/apk/* \
-	&& sed -i '/^tty/s/.*/#\0/' /etc/inittab
+	&& sed -i '/^tty/s/.*/#\0/' /etc/inittab \
+	&& rc-update add syslog boot && rc-update add dhcpd default
 
 ADD ./patch/ /
 

@@ -9,7 +9,7 @@ set_iptables_docker_used() {
 		# https://git.netfilter.org/iptables/tree/iptables/nft-shared.c?id=f5cf76626d95d2c491a80288bccc160c53b44e88#n420
 		# https://github.com/docker-library/docker/pull/468#discussion_r1442131459
 		for f in /proc/net/ip_tables_names /proc/net/ip6_tables_names /proc/net/arp_tables_names; do
-			if b="$(cat "$f")" && [ -n "$b" ]; then
+			if b="$(cat "$f" 2>/dev/null)" && [ -n "$b" ]; then
 				exit 0
 			fi
 		done
@@ -39,6 +39,8 @@ build_iptables_cmd() {
 
 	dns_udp_cmd="PREROUTING -d ${br_lan_ipaddr}/32 -p udp -m udp --dport 53 -j DNAT --to-destination ${dns_udp_dst}"
 	dns_tcp_cmd="PREROUTING -d ${br_lan_ipaddr}/32 -p tcp -m tcp --dport 53 -j DNAT --to-destination ${dns_tcp_dst}"
+
+	chk_sum_cmd="POSTROUTING -s 127.0.0.11 -o br-lan -p udp -j CHECKSUM --checksum-fill"
 }
 
 add_iptables_rule() {
@@ -49,6 +51,15 @@ del_iptables_rule() {
 	iptables -t nat -C $@ >/dev/null 2>&1 && iptables -t nat -D $@
 }
 
+add_iptables_mangle_rule() {
+	tb=mangle
+	iptables -t $tb -C $@ >/dev/null 2>&1 || iptables -t $tb -I $@
+}
+
+del_iptables_mangle_rule() {
+	tb=mangle
+	iptables -t $tb -C $@ >/dev/null 2>&1 && iptables -t $tb -D $@
+}
 
 
 start() {
@@ -58,13 +69,22 @@ start() {
 
 	ip link add br-lan type bridge
 	ip link set br-lan up
+
+	sysctl -w net.ipv4.conf.br-lan.route_localnet=1
+
 	ip addr add ${br_lan_ipaddr}/${br_lan_prefix} brd + dev br-lan
+	ip link add ethx type veth peer vethx
+	ip link set vethx master br-lan
+	ip link set vethx up
+	ip link set ethx up
 
 	add_iptables_rule ${br_out_cmd}
 	add_iptables_rule ${dns_udp_cmd}
 	add_iptables_rule ${dns_tcp_cmd}
 	add_iptables_rule $(echo ${dns_udp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
         add_iptables_rule $(echo ${dns_tcp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
+
+	add_iptables_mangle_rule ${chk_sum_cmd}
 }
 
 stop() {
@@ -76,7 +96,12 @@ stop() {
 	del_iptables_rule ${dns_udp_cmd}
 	del_iptables_rule ${dns_tcp_cmd}
 	del_iptables_rule $(echo ${dns_udp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
-        del_iptables_rule $(echo ${dns_tcp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
+	del_iptables_rule $(echo ${dns_tcp_cmd} | sed 's/PREROUTING -d/OUTPUT -d/')
 
+	del_iptables_mangle_rule ${chk_sum_cmd}
+
+	sysctl -w net.ipv4.conf.br-lan.route_localnet=0
+
+	ip link del ethx
 	ip link del br-lan
 }

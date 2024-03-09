@@ -1,5 +1,13 @@
 #!/sbin/openrc-run
 
+_create_tun() {
+	[ -c /dev/net/tun ] && return
+
+	mkdir -p /dev/net
+	mknod /dev/net/tun c 10 200
+	chmod 666 /dev/net/tun
+}
+
 start() {
-	:
+	_create_tun
 }
