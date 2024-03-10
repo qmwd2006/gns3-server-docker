@@ -1,6 +1,6 @@
 #!/sbin/openrc-run
 
-: ${BR_LAN_IPADDR:=198.168.8.1}
+: ${BR_LAN_IPADDR:=192.168.8.1}
 : ${BR_LAN_PREFIX:=24}
 
 set_iptables_docker_used() {
