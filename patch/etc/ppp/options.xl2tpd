@@ -13,4 +13,6 @@ nodefaultroute
 debug
 proxyarp
 connect-delay 5000
+
 noipv6
+require-mschap-v2
