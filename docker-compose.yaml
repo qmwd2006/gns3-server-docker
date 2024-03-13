@@ -9,3 +9,4 @@ services:
       - ./ws:/ws
     ports:
       - "4080:3080"
+      - "5080:1701/udp"
